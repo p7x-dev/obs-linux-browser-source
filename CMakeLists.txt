@@ -39,12 +39,18 @@ target_include_directories(obs-widget-browser PRIVATE src)
 
 # Arch Linux ships the QRhi private headers under a versioned subdirectory
 # (QtGui/<ver>/QtGui/rhi/qrhi.h); other distros expose them as <rhi/qrhi.h>.
-foreach(dir
-        /usr/include/qt6/QtGui/6.11.2/QtGui
-        /usr/include/qt6/QtGui/6.11.2)
-    if(EXISTS "${dir}/rhi/qrhi.h")
-        target_include_directories(obs-widget-browser PRIVATE "${dir}")
+# Discover the actual version so CI keeps building after Qt upgrades.
+get_target_property(_qt_gui_include_dirs Qt6::Gui INTERFACE_INCLUDE_DIRECTORIES)
+foreach(_prefix IN LISTS _qt_gui_include_dirs)
+    if(EXISTS "${_prefix}/rhi/qrhi.h")
+        target_include_directories(obs-widget-browser PRIVATE "${_prefix}")
     endif()
+    file(GLOB _versioned_dirs "${_prefix}/*/QtGui")
+    foreach(_dir IN LISTS _versioned_dirs)
+        if(EXISTS "${_dir}/rhi/qrhi.h")
+            target_include_directories(obs-widget-browser PRIVATE "${_dir}")
+        endif()
+    endforeach()
 endforeach()
 target_link_libraries(obs-widget-browser PRIVATE
     OBS::libobs

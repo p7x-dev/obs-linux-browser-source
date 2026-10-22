@@ -1,5 +1,7 @@
 # obs-widget-browser
 
+[![build](https://github.com/p7x-dev/obs-linux-browser-source/actions/workflows/build.yml/badge.svg)](https://github.com/p7x-dev/obs-linux-browser-source/actions/workflows/build.yml)
+
 Браузерный виджет-источник для OBS Studio на базе **Qt WebEngine (Chromium 140)** — без CEF.
 
 Решает проблему дистрибутивов, где в OBS нет встроенного Browser Source (например, Arch Linux: `obs-studio` собирается без obs-browser/CEF). Добавляет в OBS источник **«Браузерный виджет»**, который показывает любую страницу/виджет по URL в сцене.

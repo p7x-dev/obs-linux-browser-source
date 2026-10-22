@@ -1,0 +1,73 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux (Arch, Qt WebEngine)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --user root
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel cmake ninja git nodejs \
+            obs-studio qt6-base qt6-declarative qt6-webengine qt6-webchannel
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME//\//-}"
+          archive="obs-widget-browser-${version}-linux-x86_64.tar.gz"
+          rm -rf dist
+          mkdir -p dist/obs-widget-browser/bin/64bit
+          mkdir -p dist/obs-widget-browser/data/locale
+          cp build/obs-widget-browser.so dist/obs-widget-browser/bin/64bit/
+          cp data/locale/*.ini dist/obs-widget-browser/data/locale/
+          cp README.md LICENSE dist/obs-widget-browser/
+          tar -C dist -czf "$archive" obs-widget-browser
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-widget-browser-linux-x86_64
+          path: ${{ env.ARCHIVE }}
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
