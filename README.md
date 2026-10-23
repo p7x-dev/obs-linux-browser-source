@@ -2,27 +2,27 @@
 
 [![build](https://github.com/p7x-dev/obs-linux-browser-source/actions/workflows/build.yml/badge.svg)](https://github.com/p7x-dev/obs-linux-browser-source/actions/workflows/build.yml)
 
-Браузерный виджет-источник для OBS Studio на базе **Qt WebEngine (Chromium 140)** — без CEF.
+A browser widget source for OBS Studio powered by **Qt WebEngine (Chromium 140)** — no CEF required.
 
-Решает проблему дистрибутивов, где в OBS нет встроенного Browser Source (например, Arch Linux: `obs-studio` собирается без obs-browser/CEF). Добавляет в OBS источник **«Браузерный виджет»**, который показывает любую страницу/виджет по URL в сцене.
+It solves the problem of distributions where OBS ships without the built-in Browser Source (for example, Arch Linux builds `obs-studio` without obs-browser/CEF). It adds a **Widget Browser** source that displays any web page or widget by URL directly in a scene.
 
-## Возможности
+## Features
 
-- Новый тип источника: *Widget Browser* (Браузерный виджет)
-- Настройки сгруппированы по разделам: URL, размер и FPS (5–60), взаимодействие, эндпоинты и действия; у параметров есть подсказки
-- **Интерактивность**: мышь и клавиатура из окна OBS «Взаимодействие» передаются в страницу; перехват можно отключить
-- **Автосбор эндпоинтов**: плагин перехватывает `fetch`, `XMLHttpRequest`, `sendBeacon`, `EventSource` и `WebSocket` и показывает все адреса, которые запрашивает виджет
-- **Действия и горячие клавиши**: для любого эндпоинта можно создать действие и назначить ему сочетание клавиш OBS
-- Прозрачный фон (виджеты StreamElements/Streamlabs/собственные работают с alpha-каналом)
-- Рендеринг в offscreen-окно через `QQuickRenderControl` + `QWebEngineView`
-- Работает на X11 и Wayland
-- Кроссплатформенность: тот же код собирается на Linux / Windows / macOS (нужен Qt WebEngine)
+- New source type: *Widget Browser*
+- Settings grouped into sections: URL, size and FPS (5–60), interaction, endpoints and actions; every option has a description
+- **Interaction**: mouse and keyboard input from the OBS Interact window is forwarded to the page, and can be disabled
+- **Endpoint discovery**: the plugin hooks `fetch`, `XMLHttpRequest`, `sendBeacon`, `EventSource` and `WebSocket` and lists every URL the widget requests
+- **Actions and hotkeys**: any endpoint can be turned into an action with its own OBS hotkey
+- Transparent background (StreamElements/Streamlabs and custom widgets work with the alpha channel)
+- Off-screen rendering via `QQuickRenderControl` + `QWebEngineView`
+- Works on X11 and Wayland
+- Cross-platform: the same code builds on Linux / Windows / macOS (Qt WebEngine required)
 
-## Требования
+## Requirements
 
-- OBS Studio (проверено на 32.2.2)
-- Qt 6.4+ с модулями QtWebEngine, QtWebChannel и QtNetwork
-- CMake 3.21+, компилятор C++17
+- OBS Studio (tested with 32.2.2)
+- Qt 6.4+ with QtWebEngine, QtWebChannel and QtNetwork
+- CMake 3.21+, a C++17 compiler
 
 ### Arch Linux
 
@@ -30,45 +30,60 @@
 sudo pacman -S obs-studio qt6-webengine qt6-webchannel cmake ninja
 ```
 
-## Сборка и установка
+## Build and install
 
 ```sh
 cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-ctest --test-dir build          # юнит-тесты (URL-нормализация)
-./install-local.sh              # установка в ~/.config/obs-studio/plugins
+ctest --test-dir build          # unit tests (URL normalization)
+./install-local.sh              # install into ~/.config/obs-studio/plugins
 ```
 
-Для системной установки:
+For a system-wide install:
 
 ```sh
 cmake --install build --prefix /usr
 ```
 
-Перезапустите OBS Studio. Источник появится в «Источниках» как **Браузерный виджет**.
+Restart OBS Studio. The source will appear in the source list as **Widget Browser**.
 
-## Интерактивность и действия
+## Releases
 
-1. Добавьте источник и укажите URL виджета.
-2. Поработайте с виджетом: плагин сам собирает эндпоинты, которые тот запрашивает.
-   Список виден в свойствах источника в разделе **«Эндпоинты виджета»**
-   (кнопка «Обновить список» перестраивает его).
-3. Нажмите **«Добавить найденные в действия»** — плагин создаст готовые строки
-   действий; лишние можно удалить, названия — изменить.
-4. Формат строки действия: `Название | МЕТОД | URL | page/plugin`.
-   - `page` — запрос выполняется внутри страницы (`fetch`), сохраняются cookies,
-     сессия и относительные URL;
-   - `plugin` — запрос отправляет сам плагин через Qt Network.
-   - Относительные URL считаются от адреса виджета.
-5. Откройте **«Настройки → Горячие клавиши»** и назначьте сочетания в разделе
-   этого источника — по одному на каждое действие.
-6. Для кликов и ввода текста откройте контекстное меню источника →
-   **«Взаимодействие»**. Чекбокс «Разрешить ввод мышью и клавиатурой» в
-   свойствах источника отключает перехват, если виджет должен быть только
-   для показа.
+Tagged builds (`v*`) are built by CI and attached to GitHub Releases:
 
-Если виджет знает свои эндпоинты заранее (например, они вызываются только по
-кнопке), он может объявить их сам:
+<https://github.com/p7x-dev/obs-linux-browser-source/releases>
+
+The archive uses the OBS user-plugin layout:
+
+```
+obs-widget-browser/
+  bin/64bit/obs-widget-browser.so
+  data/locale/*.ini
+```
+
+Extract it into `~/.config/obs-studio/plugins/` and restart OBS. The CI build targets Arch Linux and links against the system Qt 6 and libobs.
+
+## Interaction and actions
+
+1. Add the source and enter the widget URL.
+2. Use the widget normally: the plugin collects the endpoints it requests.
+   The list is shown in the source properties under **Widget endpoints**
+   (the **Refresh endpoint list** button rebuilds it).
+3. Click **Add discovered endpoints to actions** — the plugin creates ready-made
+   action rows; remove the ones you do not need and rename the rest.
+4. Action row format: `Name | METHOD | URL | page/plugin`.
+   - `page` — the request is executed inside the page (`fetch`), so cookies,
+     the session and relative URLs keep working;
+   - `plugin` — the plugin sends the request itself via Qt Network.
+   - Relative URLs are resolved against the widget URL.
+5. Open **Settings → Hotkeys** and assign a key combination in this source's
+   section — one per action.
+6. For clicking and typing, open the source context menu → **Interact**. The
+   **Allow mouse and keyboard input** checkbox in the source properties disables
+   input forwarding if the widget should be display-only.
+
+If the widget knows its endpoints in advance (for example, they are only called
+from a button), it can declare them itself:
 
 ```js
 window.__OBS_WIDGET_ENDPOINTS__ = [
@@ -77,52 +92,53 @@ window.__OBS_WIDGET_ENDPOINTS__ = [
 ];
 ```
 
-Поддерживается и форма `window.obsWidget.endpoints` с тем же форматом.
+The same format is supported through `window.obsWidget.endpoints`.
 
 ## Windows / macOS
 
-Qt WebEngine нельзя статически вшить: рядом с `obs-widget-browser.dll`/`.dylib`
-должны лежать библиотеки Qt (включая `QtWebEngineProcess` и ресурсы Chromium).
-Удобнее всего собрать через [aqtinstall](https://aqtinstall.github.io/) и разложить
-Qt рядом с плагином (стандартный подход для Qt-плагинов OBS).
+Qt WebEngine cannot be linked statically: the Qt libraries (including
+`QtWebEngineProcess` and the Chromium resources) must be deployed next to
+`obs-widget-browser.dll`/`.dylib`. The easiest way is to build with
+[aqtinstall](https://aqtinstall.github.io/) and place Qt next to the plugin
+(the standard approach for Qt-based OBS plugins).
 
-## Известные ограничения
+## Known limitations
 
-- **Linux: софтверный композитинг Chromium** (`--disable-gpu`) включён по
-  умолчанию — на некоторых Intel iGPU (Mesa iris) аппаратный путь роняет драйвер.
-  Переопределить: `QTWEBENGINE_CHROMIUM_FLAGS="--use-gl=egl"` и т.п.
-  (значение переменной полностью заменяет дефолт).
-- **Смена URL пересоздаёт рендерер** — кратковременная перезагрузка страницы
-  (post-creation смена URL в offscreen Qt WebEngine ненадёжна).
-- Перехват мыши и клавиатуры работает только в окне «Взаимодействие»: клики
-  напрямую в превью OBS зарезервированы под выделение и перемещение источника.
-- Автосбор видит запросы из основного JavaScript-контекста страницы. Запросы из
-  Web Worker/Service Worker и содержимое WebSocket-сообщений не перехватываются —
-  для них используйте объявление эндпоинтов через `window.__OBS_WIDGET_ENDPOINTS__`.
-- Действия отправляют запрос без тела (пустой body). Если эндпоинту нужен
-  JSON-body, пока используйте `page`-действие с собственным JS на странице.
-- Поддержка H.264/AAC в `<video>` зависит от сборки QtWebEngine дистрибутива
-  (Arch: H.264 есть).
-- OBS вызывает часть колбэков источника не с главного потока (obs-websocket);
-  все операции Qt маршалятся в главный поток.
+- **Linux: Chromium software compositing** (`--disable-gpu`) is enabled by
+  default because the hardware path crashes the Mesa iris driver on some Intel
+  iGPUs. Override it with `QTWEBENGINE_CHROMIUM_FLAGS="--use-gl=egl"` or similar
+  (the variable value fully replaces the default).
+- **Changing the URL recreates the renderer**, causing a short page reload
+  (post-creation URL changes in off-screen Qt WebEngine are unreliable).
+- Mouse and keyboard forwarding only works in the **Interact** window: clicks
+  directly in the OBS preview are reserved for selecting and moving sources.
+- Endpoint discovery sees requests from the page's main JavaScript context.
+  Web Worker/Service Worker requests and WebSocket message contents are not
+  captured — declare those endpoints via `window.__OBS_WIDGET_ENDPOINTS__`.
+- Actions send requests with an empty body. If an endpoint requires a JSON body,
+  use a `page` action with custom JavaScript on the page for now.
+- H.264/AAC support in `<video>` depends on the distribution's QtWebEngine build
+  (Arch includes H.264).
+- OBS calls some source callbacks from non-main threads (obs-websocket); all Qt
+  operations are marshalled to the main thread.
 
-## Структура
+## Project layout
 
 ```
 src/
-  plugin.cpp            — точка входа модуля, инициализация QtWebEngine
-  widget-source.cpp     — obs_source_info: настройки, тик, отрисовка текстуры
-  widget-renderer.cpp   — QQuickRenderControl + WebEngineView (захват кадров,
-                          ввод, WebChannel, выполнение действий)
-  url-utils.cpp         — нормализация URL (чистая логика)
-  qml/WidgetView.qml    — QML-сцена виджета
-  qml/discovery.js      — внедряемый JS: перехват запросов и запуск действий
-  qml/qwebchannel.js    — клиентская библиотека Qt WebChannel
+  plugin.cpp            — module entry point, QtWebEngine initialization
+  widget-source.cpp     — obs_source_info: settings, tick, texture rendering
+  widget-renderer.cpp   — QQuickRenderControl + WebEngineView (frame capture,
+                          input, WebChannel, action execution)
+  url-utils.cpp         — URL normalization (pure logic)
+  qml/WidgetView.qml    — the widget's QML scene
+  qml/discovery.js      — injected JS: request interception and action runner
+  qml/qwebchannel.js    — Qt WebChannel client library
 tests/
-  test_url_utils.cpp    — юнит-тесты
+  test_url_utils.cpp    — unit tests
 data/locale/            — en-US, ru-RU
 ```
 
-## Лицензия
+## License
 
-GPL-2.0 (см. LICENSE).
+GPL-2.0 (see LICENSE).
