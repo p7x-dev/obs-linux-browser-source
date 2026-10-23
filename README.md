@@ -51,6 +51,24 @@ For a system-wide install:
 cmake --install build --prefix /usr
 ```
 
+### Arch Linux (AUR)
+
+AUR packaging files are provided in [`aur/`](aur/); see
+[`aur/README.md`](aur/README.md) for publishing and update instructions.
+After the package is published, install it with:
+
+```sh
+yay -S obs-widget-browser
+```
+
+or manually:
+
+```sh
+git clone https://aur.archlinux.org/obs-widget-browser.git
+cd obs-widget-browser
+makepkg -si
+```
+
 Restart OBS Studio. The source will appear in the source list as **Widget Browser**.
 
 ## Releases
