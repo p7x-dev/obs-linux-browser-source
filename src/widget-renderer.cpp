@@ -372,6 +372,9 @@ void WidgetRenderer::renderFrame()
                  QImage::Format_RGBA8888_Premultiplied);
     if (m_rhi->isYUpInFramebuffer())
         frame = frame.flipped(Qt::Vertical);
+    // The image above wraps the readback buffer, which is released when this
+    // function returns. Detach it so the stored frame owns its pixels.
+    frame = frame.copy();
 
     QMutexLocker lock(&m_frameMutex);
     m_frame = std::move(frame);

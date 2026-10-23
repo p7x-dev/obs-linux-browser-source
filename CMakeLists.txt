@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(obs-widget-browser
-        VERSION 0.1.0
+        VERSION 0.1.1
         DESCRIPTION "Browser widget source for OBS Studio without CEF (Qt WebEngine based)"
         LANGUAGES CXX)
 
@@ -16,13 +16,15 @@ endif()
 
 find_package(libobs REQUIRED)
 find_package(Qt6 6.4 REQUIRED COMPONENTS
-    Core Gui Quick Network WebChannel WebChannelQuick
+    Core Gui Widgets Quick Network WebChannel WebChannelQuick
     WebEngineCore WebEngineQuick)
 
 add_library(obs-widget-browser MODULE
     src/plugin.cpp
     src/widget-source.cpp
     src/widget-renderer.cpp
+    src/actions.cpp
+    src/actions-dialog.cpp
     src/url-utils.cpp
 )
 
@@ -56,6 +58,7 @@ target_link_libraries(obs-widget-browser PRIVATE
     OBS::libobs
     Qt6::Core
     Qt6::Gui
+    Qt6::Widgets
     Qt6::Quick
     Qt6::Network
     Qt6::WebChannel

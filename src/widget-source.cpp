@@ -1,22 +1,21 @@
 #include "widget-source.h"
 
+#include "actions-dialog.h"
+#include "actions.h"
 #include "widget-renderer.h"
-#include "url-utils.h"
 
+#include <QApplication>
 #include <QCoreApplication>
-#include <QCryptographicHash>
 #include <QHash>
 #include <QImage>
-#include <QSet>
-#include <QString>
-#include <QStringList>
 #include <QMutex>
+#include <QString>
 #include <QThread>
-#include <QUrl>
 #include <atomic>
 #include <functional>
 
 #include <obs.h>
+#include <util/dstr.h>
 
 namespace {
 
@@ -25,7 +24,6 @@ constexpr const char *S_WIDTH = "width";
 constexpr const char *S_HEIGHT = "height";
 constexpr const char *S_FPS = "fps";
 constexpr const char *S_INTERACTIVE = "interactive";
-constexpr const char *S_ACTIONS = "actions";
 
 constexpr int DEFAULT_WIDTH = 800;
 constexpr int DEFAULT_HEIGHT = 600;
@@ -34,17 +32,6 @@ constexpr int MIN_DIMENSION = 64;
 constexpr int MAX_DIMENSION = 4096;
 constexpr int MIN_FPS = 5;
 constexpr int MAX_FPS = 60;
-
-// One user-defined action bound to a discovered (or manually entered)
-// endpoint. Format in the settings list: Name | METHOD | URL | page/plugin.
-struct WidgetAction
-{
-    QString name;
-    QString method;
-    QString url;
-    bool inPage = true;
-    QString hotkeyKey;
-};
 
 struct HotkeyReg
 {
@@ -97,89 +84,12 @@ WidgetRenderer *currentRenderer(WidgetSource *ws)
     return ws->renderer.load();
 }
 
-QString actionHotkeyKey(const QString &method, const QString &url)
-{
-    const QByteArray source =
-        (method.toUpper() + QLatin1Char('\n') + url).toUtf8();
-    const QByteArray hash =
-        QCryptographicHash::hash(source, QCryptographicHash::Sha1).toHex();
-    return QStringLiteral("action_") +
-           QString::fromLatin1(hash.left(16));
-}
-
-QString endpointActionName(const WidgetEndpoint &endpoint)
-{
-    const QUrl url(endpoint.url);
-    QString path = url.path();
-    if (path.isEmpty() || path == QLatin1String("/"))
-        path = url.host();
-    return QStringLiteral("%1 %2").arg(endpoint.method, path);
-}
-
 bool readInteractive(obs_data_t *settings)
 {
     // Sources saved before the setting existed must keep input enabled.
     if (!obs_data_has_user_value(settings, S_INTERACTIVE))
         return true;
     return obs_data_get_bool(settings, S_INTERACTIVE);
-}
-
-QVector<WidgetAction> parseActions(obs_data_t *settings)
-{
-    QVector<WidgetAction> actions;
-    obs_data_array_t *array = obs_data_get_array(settings, S_ACTIONS);
-    if (!array)
-        return actions;
-
-    QSet<QString> seen;
-    const size_t count = obs_data_array_count(array);
-    for (size_t i = 0; i < count; ++i) {
-        obs_data_t *item = obs_data_array_item(array, i);
-        const char *raw = obs_data_get_string(item, "value");
-        const QString line = QString::fromUtf8(raw ? raw : "");
-        obs_data_release(item);
-
-        QStringList parts = line.split(QLatin1Char('|'));
-        for (QString &part : parts)
-            part = part.trimmed();
-
-        WidgetAction action;
-        if (parts.size() >= 4) {
-            action.name = parts[0];
-            action.method = parts[1];
-            action.url = parts[2];
-            action.inPage =
-                parts[3].compare(QLatin1String("plugin"), Qt::CaseInsensitive) !=
-                0;
-        } else if (parts.size() == 3) {
-            action.name = parts[0];
-            action.method = parts[1];
-            action.url = parts[2];
-        } else if (parts.size() == 2) {
-            action.name = parts[0];
-            action.method = QStringLiteral("GET");
-            action.url = parts[1];
-        } else {
-            continue;
-        }
-
-        if (action.url.isEmpty())
-            continue;
-        action.method =
-            action.method.isEmpty() ? QStringLiteral("GET")
-                                    : action.method.toUpper();
-        if (action.name.isEmpty())
-            action.name = action.method + QLatin1Char(' ') + action.url;
-        action.hotkeyKey = actionHotkeyKey(action.method, action.url);
-
-        if (seen.contains(action.hotkeyKey))
-            continue;
-        seen.insert(action.hotkeyKey);
-        actions.append(action);
-    }
-
-    obs_data_array_release(array);
-    return actions;
 }
 
 void executeAction(WidgetSource *ws, const WidgetAction &action)
@@ -196,6 +106,48 @@ void executeAction(WidgetSource *ws, const WidgetAction &action)
         renderer->executeInPage(action.url, action.method);
     else
         renderer->executeHttp(action.url, action.method);
+}
+
+QHash<QString, QString> currentHotkeyBindings(WidgetSource *ws)
+{
+    QHash<obs_hotkey_id, QString> keyById;
+    {
+        QMutexLocker lock(&ws->frameMutex);
+        for (const HotkeyReg &reg : ws->hotkeys)
+            keyById.insert(reg.id, reg.action.hotkeyKey);
+    }
+
+    struct BindingContext {
+        const QHash<obs_hotkey_id, QString> *keyById;
+        QHash<QString, QString> *result;
+    };
+
+    QHash<QString, QString> result;
+    BindingContext context{&keyById, &result};
+    obs_enum_hotkey_bindings(
+        [](void *data, size_t, obs_hotkey_binding_t *binding) -> bool {
+            auto *ctx = static_cast<BindingContext *>(data);
+            const auto it = ctx->keyById->find(
+                obs_hotkey_binding_get_hotkey_id(binding));
+            if (it == ctx->keyById->end())
+                return true;
+
+            struct dstr str = {};
+            obs_key_combination_to_str(
+                obs_hotkey_binding_get_key_combination(binding), &str);
+            if (str.array && *str.array) {
+                const QString combo = QString::fromUtf8(str.array);
+                QString &target = (*ctx->result)[it.value()];
+                if (!target.isEmpty())
+                    target += QStringLiteral(", ");
+                target += combo;
+            }
+            dstr_free(&str);
+            return true;
+        },
+        &context);
+
+    return result;
 }
 
 void widget_action_hotkey(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey,
@@ -345,6 +297,7 @@ void *widget_create(obs_data_t *settings, obs_source_t *source)
 
     syncHotkeys(ws, actions);
     runOnMain([ws]() { createRendererOnMain(ws); });
+
     return ws;
 }
 
@@ -440,7 +393,7 @@ void widget_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, S_INTERACTIVE, true);
 
     obs_data_array_t *empty = obs_data_array_create();
-    obs_data_set_default_array(settings, S_ACTIONS, empty);
+    obs_data_set_default_array(settings, kActionsSettingsKey, empty);
     obs_data_array_release(empty);
 }
 
@@ -458,92 +411,43 @@ bool widget_reload_button(obs_properties_t *props, obs_property_t *,
     return true;
 }
 
-bool widget_refresh_endpoints(obs_properties_t *, obs_property_t *, void *)
-{
-    // Endpoint discovery runs continuously in the page; rebuilding the
-    // properties list is enough to show the latest data.
-    return true;
-}
-
-bool widget_add_discovered(obs_properties_t *, obs_property_t *, void *data)
+bool widget_open_actions_dialog(obs_properties_t *, obs_property_t *,
+                                void *data)
 {
     auto *ws = static_cast<WidgetSource *>(data);
     if (!ws || !ws->source)
         return false;
 
-    WidgetRenderer *renderer = currentRenderer(ws);
-    if (!renderer)
-        return false;
-
-    const QVector<WidgetEndpoint> endpoints = renderer->endpoints();
-    if (endpoints.isEmpty())
-        return false;
+    QVector<WidgetEndpoint> endpoints;
+    if (WidgetRenderer *renderer = currentRenderer(ws))
+        endpoints = renderer->endpoints();
 
     obs_data_t *settings = obs_source_get_settings(ws->source);
-    const QVector<WidgetAction> existing = parseActions(settings);
-    QSet<QString> keys;
-    for (const WidgetAction &action : existing)
-        keys.insert(action.hotkeyKey);
-
-    obs_data_array_t *array = obs_data_get_array(settings, S_ACTIONS);
-    if (!array)
-        array = obs_data_array_create();
-
-    bool changed = false;
-    for (const WidgetEndpoint &endpoint : endpoints) {
-        const QString scheme = QUrl(endpoint.url).scheme().toLower();
-        if (scheme != QLatin1String("http") &&
-            scheme != QLatin1String("https"))
-            continue;
-
-        const QString key = actionHotkeyKey(endpoint.method, endpoint.url);
-        if (keys.contains(key))
-            continue;
-
-        const QString line =
-            QStringLiteral("%1 | %2 | %3 | page")
-                .arg(endpointActionName(endpoint), endpoint.method,
-                     endpoint.url);
-        obs_data_t *item = obs_data_create();
-        obs_data_set_string(item, "value", line.toUtf8().constData());
-        obs_data_array_push_back(array, item);
-        obs_data_release(item);
-
-        keys.insert(key);
-        changed = true;
-    }
-
-    if (changed) {
-        obs_data_set_array(settings, S_ACTIONS, array);
-        obs_source_update(ws->source, settings);
-    }
-
-    obs_data_array_release(array);
+    const QVector<WidgetAction> actions = parseActions(settings);
     obs_data_release(settings);
-    return changed;
-}
 
-QString buildEndpointsText(WidgetSource *ws)
-{
-    QString text = obs_module_text("WidgetBrowser.Endpoints.Hint");
-    text += QLatin1String("\n\n");
+    const QHash<QString, QString> bindings = currentHotkeyBindings(ws);
+    obs_weak_source_t *weak = obs_source_get_weak_source(ws->source);
 
-    QString list;
-    if (ws) {
-        if (WidgetRenderer *renderer = currentRenderer(ws)) {
-            const QVector<WidgetEndpoint> endpoints = renderer->endpoints();
-            for (const WidgetEndpoint &endpoint : endpoints) {
-                list += QStringLiteral("%1  %2  (%3)\n")
-                            .arg(endpoint.method, endpoint.url,
-                                 endpoint.type);
-            }
-        }
+    QWidget *parent = QApplication::activeWindow();
+
+    ActionsDialog dialog(endpoints, actions, bindings, parent);
+    if (dialog.exec() != QDialog::Accepted) {
+        obs_weak_source_release(weak);
+        return false;
     }
 
-    if (list.isEmpty())
-        list = obs_module_text("WidgetBrowser.Endpoints.Empty");
-    text += list.trimmed();
-    return text;
+    obs_source_t *source = obs_weak_source_get_source(weak);
+    obs_weak_source_release(weak);
+    if (!source)
+        return false;
+
+    obs_data_t *newSettings = obs_source_get_settings(source);
+    storeActions(newSettings, dialog.actions());
+    obs_source_update(source, newSettings);
+    obs_data_release(newSettings);
+    obs_source_release(source);
+    return true;
 }
 
 obs_properties_t *widget_properties(void *data)
@@ -601,37 +505,34 @@ obs_properties_t *widget_properties(void *data)
         obs_module_text("WidgetBrowser.Group.Interaction"), OBS_GROUP_NORMAL,
         interaction);
 
-    obs_properties_t *endpoints = obs_properties_create();
-    const QString endpointsText = buildEndpointsText(ws);
-    obs_property_t *endpointsHint = obs_properties_add_text(
-        endpoints, "endpoints_info", endpointsText.toUtf8().constData(),
-        OBS_TEXT_INFO);
-    obs_property_text_set_info_type(endpointsHint, OBS_TEXT_INFO_NORMAL);
-    obs_property_text_set_info_word_wrap(endpointsHint, true);
-    obs_properties_add_button2(
-        endpoints, "refresh_endpoints",
-        obs_module_text("WidgetBrowser.Endpoints.Refresh"),
-        widget_refresh_endpoints, data);
-    obs_properties_add_button2(
-        endpoints, "add_endpoints",
-        obs_module_text("WidgetBrowser.Endpoints.AddToActions"),
-        widget_add_discovered, data);
-    obs_properties_add_group(props, "endpoints_group",
-                             obs_module_text("WidgetBrowser.Group.Endpoints"),
-                             OBS_GROUP_NORMAL, endpoints);
+    int endpointCount = 0;
+    int actionCount = 0;
+    if (ws) {
+        if (WidgetRenderer *renderer = currentRenderer(ws))
+            endpointCount = renderer->endpoints().size();
+        QMutexLocker lock(&ws->frameMutex);
+        actionCount = ws->actions.size();
+    }
 
-    obs_properties_t *actions = obs_properties_create();
-    obs_property_t *actionsHint = obs_properties_add_text(
-        actions, "actions_hint", obs_module_text("WidgetBrowser.Actions.Hint"),
-        OBS_TEXT_INFO);
-    obs_property_text_set_info_type(actionsHint, OBS_TEXT_INFO_NORMAL);
-    obs_property_text_set_info_word_wrap(actionsHint, true);
-    obs_properties_add_editable_list(
-        actions, S_ACTIONS, obs_module_text("WidgetBrowser.Actions"),
-        OBS_EDITABLE_LIST_TYPE_STRINGS, nullptr, nullptr);
-    obs_properties_add_group(props, "actions_group",
-                             obs_module_text("WidgetBrowser.Group.ActionList"),
-                             OBS_GROUP_NORMAL, actions);
+    const QString summary =
+        QString::fromUtf8(obs_module_text("WidgetBrowser.Endpoints.Summary"))
+            .arg(endpointCount)
+            .arg(actionCount);
+
+    obs_properties_t *actionsAndEndpoints = obs_properties_create();
+    obs_property_t *summaryProp = obs_properties_add_text(
+        actionsAndEndpoints, "endpoints_summary",
+        summary.toUtf8().constData(), OBS_TEXT_INFO);
+    obs_property_text_set_info_type(summaryProp, OBS_TEXT_INFO_NORMAL);
+    obs_property_text_set_info_word_wrap(summaryProp, true);
+    obs_properties_add_button2(
+        actionsAndEndpoints, "open_actions",
+        obs_module_text("WidgetBrowser.ActionsDialog.Open"),
+        widget_open_actions_dialog, data);
+    obs_properties_add_group(
+        props, "actions_endpoints_group",
+        obs_module_text("WidgetBrowser.Group.ActionsAndEndpoints"),
+        OBS_GROUP_NORMAL, actionsAndEndpoints);
 
     obs_properties_add_button2(
         props, "reload", obs_module_text("WidgetBrowser.Reload"),

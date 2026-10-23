@@ -22,9 +22,7 @@ It solves the problem of distributions where OBS ships without the built-in Brow
 
 ![Widget Browser source in a scene](docs/screenshots/source-in-scene.png)
 
-![Source properties: URL, size and interaction](docs/screenshots/properties-basic.png)
-
-![Discovered endpoints and actions](docs/screenshots/properties-actions.png)
+![Actions and endpoints editor](docs/screenshots/actions-dialog.png)
 
 ## Requirements
 
@@ -74,18 +72,18 @@ Extract it into `~/.config/obs-studio/plugins/` and restart OBS. The CI build ta
 ## Interaction and actions
 
 1. Add the source and enter the widget URL.
-2. Use the widget normally: the plugin collects the endpoints it requests.
-   The list is shown in the source properties under **Widget endpoints**
-   (the **Refresh endpoint list** button rebuilds it).
-3. Click **Add discovered endpoints to actions** — the plugin creates ready-made
-   action rows; remove the ones you do not need and rename the rest.
-4. Action row format: `Name | METHOD | URL | page/plugin`.
-   - `page` — the request is executed inside the page (`fetch`), so cookies,
-     the session and relative URLs keep working;
-   - `plugin` — the plugin sends the request itself via Qt Network.
-   - Relative URLs are resolved against the widget URL.
-5. Open **Settings → Hotkeys** and assign a key combination in this source's
-   section — one per action.
+2. Use the widget normally: the plugin collects every endpoint it requests.
+3. Open the source properties and click **Endpoints and actions…**.
+4. In the editor window:
+   - review or filter the discovered endpoints; select one or more and click
+     **Add selected as actions** (or double-click an endpoint);
+   - edit the action name, method, URL and execution target directly in the
+     table;
+   - use **Add action**, **Remove**, **Move up** and **Move down** to manage
+     the list. The **Hotkey** column shows the combination currently assigned
+     in OBS.
+5. Save the dialog. Assign key combinations in **Settings → Hotkeys**, in this
+   source's section.
 6. For clicking and typing, open the source context menu → **Interact**. The
    **Allow mouse and keyboard input** checkbox in the source properties disables
    input forwarding if the widget should be display-only.
