@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(obs-widget-browser
-        VERSION 0.1.1
+        VERSION 0.1.2
         DESCRIPTION "Browser widget source for OBS Studio without CEF (Qt WebEngine based)"
         LANGUAGES CXX)
 
@@ -75,9 +75,9 @@ set_target_properties(obs-widget-browser PROPERTIES
 include(GNUInstallDirs)
 
 install(TARGETS obs-widget-browser
-        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/obs-plugins/obs-widget-browser/bin/64bit")
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/obs-plugins")
 install(FILES data/locale/en-US.ini data/locale/ru-RU.ini
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/obs/obs-plugins/obs-widget-browser/data/locale")
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/obs/obs-plugins/obs-widget-browser/locale")
 
 enable_testing()
 add_executable(url-utils-tests
