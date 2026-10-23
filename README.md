@@ -18,6 +18,14 @@ It solves the problem of distributions where OBS ships without the built-in Brow
 - Works on X11 and Wayland
 - Cross-platform: the same code builds on Linux / Windows / macOS (Qt WebEngine required)
 
+## Screenshots
+
+![Widget Browser source in a scene](docs/screenshots/source-in-scene.png)
+
+![Source properties: URL, size and interaction](docs/screenshots/properties-basic.png)
+
+![Discovered endpoints and actions](docs/screenshots/properties-actions.png)
+
 ## Requirements
 
 - OBS Studio (tested with 32.2.2)

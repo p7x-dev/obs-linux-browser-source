@@ -51,6 +51,7 @@ jobs:
           mkdir -p dist/obs-widget-browser/data/locale
           cp build/obs-widget-browser.so dist/obs-widget-browser/bin/64bit/
           cp data/locale/*.ini dist/obs-widget-browser/data/locale/
+          cp -r docs dist/obs-widget-browser/
           cp README.md LICENSE dist/obs-widget-browser/
           tar -C dist -czf "$archive" obs-widget-browser
           echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
