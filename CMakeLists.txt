@@ -25,6 +25,7 @@ add_library(obs-widget-browser MODULE
     src/widget-renderer.cpp
     src/actions.cpp
     src/actions-dialog.cpp
+    src/gpu-selector.cpp
     src/url-utils.cpp
 )
 
@@ -86,3 +87,10 @@ add_executable(url-utils-tests
 )
 target_include_directories(url-utils-tests PRIVATE src)
 add_test(NAME url_utils COMMAND url-utils-tests)
+
+add_executable(gpu-selector-tests
+    tests/test_gpu_selector.cpp
+    src/gpu-selector.cpp
+)
+target_include_directories(gpu-selector-tests PRIVATE src)
+add_test(NAME gpu_selector COMMAND gpu-selector-tests)

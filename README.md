@@ -14,6 +14,9 @@ It solves the problem of distributions where OBS ships without the built-in Brow
 - **Endpoint discovery**: the plugin hooks `fetch`, `XMLHttpRequest`, `sendBeacon`, `EventSource` and `WebSocket` and lists every URL the widget requests
 - **Actions and hotkeys**: any endpoint can be turned into an action with its own OBS hotkey
 - Transparent background (StreamElements/Streamlabs and custom widgets work with the alpha channel)
+- GPU acceleration with WebGL support (SwiftShader fallback when no GPU is available)
+- Automatic GPU selection on Linux: the most capable GPU is chosen and PRIME
+  render offload is enabled for it (for example, Intel iGPU → NVIDIA dGPU)
 - Off-screen rendering via `QQuickRenderControl` + `QWebEngineView`
 - Works on X11 and Wayland
 - Cross-platform: the same code builds on Linux / Windows / macOS (Qt WebEngine required)
@@ -128,10 +131,15 @@ Qt WebEngine cannot be linked statically: the Qt libraries (including
 
 ## Known limitations
 
-- **Linux: Chromium software compositing** (`--disable-gpu`) is enabled by
-  default because the hardware path crashes the Mesa iris driver on some Intel
-  iGPUs. Override it with `QTWEBENGINE_CHROMIUM_FLAGS="--use-gl=egl"` or similar
-  (the variable value fully replaces the default).
+- **Linux: GPU acceleration is enabled by default** (WebGL, GPU rasterization,
+  SwiftShader software fallback). On hybrid-GPU systems the plugin picks the
+  discrete GPU and enables PRIME render offload automatically. Setting
+  `DRI_PRIME`, `__NV_PRIME_RENDER_OFFLOAD`, `__GLX_VENDOR_LIBRARY_NAME` or
+  `QTWEBENGINE_CHROMIUM_FLAGS` disables the automatic choice and uses your
+  configuration instead. If Chromium's GPU path crashes the Mesa iris driver on
+  some Intel iGPUs, force software rendering with
+  `QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu"`; WebGL may be unavailable in that
+  mode (the variable value fully replaces the default).
 - **Changing the URL recreates the renderer**, causing a short page reload
   (post-creation URL changes in off-screen Qt WebEngine are unreliable).
 - Mouse and keyboard forwarding only works in the **Interact** window: clicks
@@ -154,12 +162,14 @@ src/
   widget-source.cpp     — obs_source_info: settings, tick, texture rendering
   widget-renderer.cpp   — QQuickRenderControl + WebEngineView (frame capture,
                           input, WebChannel, action execution)
+  gpu-selector.cpp      — DRM GPU discovery and PRIME offload selection
   url-utils.cpp         — URL normalization (pure logic)
   qml/WidgetView.qml    — the widget's QML scene
   qml/discovery.js      — injected JS: request interception and action runner
   qml/qwebchannel.js    — Qt WebChannel client library
 tests/
-  test_url_utils.cpp    — unit tests
+  test_url_utils.cpp    — URL normalization unit tests
+  test_gpu_selector.cpp — GPU selection unit tests
 data/locale/            — en-US, ru-RU
 ```
 
